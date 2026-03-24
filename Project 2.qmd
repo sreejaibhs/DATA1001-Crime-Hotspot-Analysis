@@ -1,0 +1,391 @@
+---
+title: "Analyzing Borough and Time-Based Crime Hotspots to Enhance Police Deployment"
+format: 
+  html:
+    embed-resources: true
+    toc: true
+    code-fold: true
+    math: mathjax
+---
+
+# 1. Client Bio 👤 
+
+<img src="logo.png" width="250"/>
+
+[New York City Police Department](https://www.linkedin.com/company/new-york-city-police-department/)
+
+The New York City Police Department (NYPD) upholds community partnership and public safety by enforcing laws, preserving peace, and protecting residents. Guided by integrity and innovation, the NYPD enhances quality of life through Neighborhood Policing and proactive strategies that foster safety, reduce fear, and address underlying causes of crime citywide.
+
+# 2. Recommendation 📌
+
+I recommend the NYPD to increase patrol presence in boroughs like Brooklyn and Manhattan during afternoon hours (2 PM–9 PM) . Staten Island and Queens can maintain standard patrol levels with focused night monitoring. The department should  integrate predictive analytics to forecast emerging hotspots using hourly trends. 
+
+# 3. Evidence 📊
+
+## 3.1 Data source 
+
+The data used in this report is sourced from the NYPD Complaint Data Historic dataset, available on the NYC OpenData platform, which includes records of all crimes reported to the New York City Police Department since the last 3 months of 2024.
+
+## 3.2 Crime Distribution Across New York City Boroughs
+
+```{r message=FALSE, warning=FALSE}
+
+
+nypd <- read.csv("nypd.csv")
+
+library(dplyr)
+library(ggplot2)
+library(viridis)
+
+nypd_clean <- nypd %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(null)") %>%
+  filter(!is.na(CMPLNT_FR_TM), CMPLNT_FR_TM != "")
+
+
+borough_total <- nypd_clean %>%
+  group_by(BORO_NM) %>%
+  summarise(total_crimes = n(), .groups = "drop") %>%
+  mutate(percentage = total_crimes / sum(total_crimes) * 100) %>%
+  arrange(desc(total_crimes))
+
+
+base_colors <- viridis::viridis(nrow(borough_total), option = "magma", direction = -1)
+names(base_colors) <- borough_total$BORO_NM
+base_colors["STATEN ISLAND"] <- "#6A1B9A"
+
+ggplot(borough_total,
+       aes(x = reorder(BORO_NM, total_crimes),
+           y = total_crimes,
+           fill = BORO_NM)) +
+  geom_col(width = 0.6, show.legend = FALSE) +
+  scale_fill_manual(values = base_colors) +
+  coord_flip(clip = "off") +
+  geom_text(aes(
+    label = paste0(scales::comma(total_crimes), " (", sprintf("%.1f", percentage), "%)")
+  ),
+  hjust = -0.1,           # place labels outside the bars
+  color = "black",
+  size = 3,               # smaller text
+  fontface = "bold"
+  ) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.15))) +  # adds space for labels
+  labs(
+    title = "Total Reported Crimes by Borough",
+    subtitle = "Percentage Share of Overall NYC Crime",
+    x = "Borough",
+    y = "Number of Crimes"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    axis.text = element_text(face = "bold"),
+    panel.grid.major.y = element_blank(),
+    plot.margin = margin(10, 25, 10, 10)
+  )
+
+```
+
+The bar chart shows that Brooklyn and Manhattan account for the majority of reported crimes in New York City, while the Bronx and Queens record moderately lower figures. Staten Island reports the fewest crimes, suggesting lower population density or effective policing. This distribution aligns with findings by [Hachicho and Butt (2023) in Unmasking Shadows: Unraveling Crime Patterns in NYC’s Boroughs](https://academicworks.cuny.edu/ny_pubs/1079/), who observed that borough such as Brooklyn consistently exhibit higher crime intensity due to its larger populations and greater commercial activity. Overall, the variation across boroughs highlights the need for targeted crime prevention and data-driven police deployment in areas of higher concentration.
+
+## 3.3 Peak Crime Hours Across New York City Boroughs
+
+```{r message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(ggplot2)
+library(viridis)
+
+nypd <- read.csv("nypd.csv")
+
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(viridis)
+
+nypd_clean <- nypd %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(null)") %>%
+  filter(!is.na(CMPLNT_FR_TM), CMPLNT_FR_TM != "")
+
+
+nypd_clean <- nypd_clean %>%
+  mutate(Hour = hour(hms(CMPLNT_FR_TM)))
+
+
+crime_by_hour_borough <- nypd_clean %>%
+  group_by(BORO_NM, Hour) %>%
+  summarise(crime_count = n(), .groups = "drop")
+
+
+fill_breaks <- pretty(range(crime_by_hour_borough$crime_count), n = 5)
+
+
+ggplot(crime_by_hour_borough, aes(x = Hour, y = BORO_NM, fill = crime_count)) +
+  geom_tile(color = "white") +
+  scale_fill_viridis(
+    option = "magma",
+    name = "Crime Count",
+    labels = scales::comma,
+    breaks = fill_breaks,
+    limits = range(fill_breaks)
+  ) +
+  labs(
+    title = "Hourly Crime Distribution by Borough",
+    
+    x = "Hour of Day",
+    y = "Borough"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 18),
+    plot.subtitle = element_text(size = 12),
+    axis.text.y = element_text(face = "bold"),
+    legend.position = "right"
+  )
+
+
+```
+
+The heat map shows that crime activity across all boroughs peaks between the afternoon and late evening hours, particularly from around 2 PM to 9 PM. Brooklyn and Manhattan experience the highest concentration of incidents during these hours, while Staten Island remains consistently low throughout the day. This pattern suggests that crimes are more frequent during periods of higher social and commercial activity, highlighting the importance of increased patrol presence during late-day and evening shifts.
+[Lau (2021) in Discovering Spatio-Temporal Pattern of City Crime – Visual Analysis on Felony Crime in NYC](https://www.preprints.org/manuscript/202101.0292/v1), similarly found that crime in NYC varies significantly across both boroughs and time of day, reinforcing that time and location factors are key to understanding crime distribution.<br>
+
+## 3.4 Variation in Hourly Crimes Across NYC Boroughs
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(viridis)
+
+nypd <- read.csv("nypd.csv")
+
+library(dplyr)
+library(lubridate)
+
+
+nypd_clean <- nypd %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(NULL)") %>%
+  filter(!is.na(CMPLNT_FR_TM), CMPLNT_FR_TM != "") %>%
+  mutate(Hour = hour(hms(CMPLNT_FR_TM)))
+
+
+hourly_counts <- nypd_clean %>%
+  group_by(BORO_NM, Hour) %>%
+  summarise(crime_count = n(), .groups = "drop")
+
+library(ggplot2)
+library(viridis)
+library(dplyr)
+
+
+hourly_counts_clean <- hourly_counts %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(null)", BORO_NM != "NULL")
+
+
+ggplot(hourly_counts_clean, aes(x = BORO_NM, y = crime_count, fill = BORO_NM)) +
+  geom_boxplot(alpha = 0.8, outlier.color = "red", outlier.alpha = 0.5) +
+  scale_fill_viridis_d(option = "magma") +
+  labs(
+    title = "Distribution of Hourly Crime Counts by Borough",
+    subtitle = "Hypothesis Testing: Hourly Crime Variation Across NYC Boroughs",
+    x = "Borough",
+    y = "Number of Crimes per Hour"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    axis.text.x = element_text(angle = 25, hjust = 1, face = "bold"),
+    legend.position = "none"
+  )
+
+
+```
+
+The box plot compares the hourly crime counts across New York City boroughs. Brooklyn shows the highest median crime count, followed closely by Manhattan, while Staten Island has the lowest median, indicating fewer incidents overall. Brooklyn and Manhattan also have the widest interquartile ranges (IQRs), reflecting greater variability in crime rates.
+
+A hypothesis test was conducted to examine differences in the hourly distribution of reported crimes among New York City boroughs. Because the data was not normally distributed, the Kruskal–Wallis test was applied, yielding a p-value of 4.840 x $10^{−20}$, indicating a highly significant difference in hourly crime levels. This result highlights that boroughs such as Brooklyn and Manhattan experience considerably higher crime intensity during afternoon hours (2 PM - 9 PM) , suggesting that police efforts should be strategically concentrated in these areas and time periods.
+
+
+
+# 4. Appendix 📑
+
+## 4.1 Hypothesis Testing
+
+[**Hypothesis**]{.underline} <br>
+H₀ :
+There is no significant difference in the hourly distribution of reported crimes among New York City boroughs.<br>
+H₁ :
+There is a significant difference in the hourly distribution of reported crimes among New York City boroughs.
+
+[**Assumptions**]{.underline}<br>
+- Independence: Each crime record is an independent observation.<br>
+- Continuous data: The density plot below confirms that crime_count is a continuous numeric variable, as values are distributed across a wide numeric range without          discrete breaks.
+
+```{r message=FALSE, warning=FALSE}
+hourly_counts_clean <- hourly_counts %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(null)", BORO_NM != "NULL")
+
+ggplot(hourly_counts, aes(x = crime_count)) +
+  geom_density(fill = "#440154", alpha = 0.6) +
+  labs(title = "Density Plot of Hourly Crime Counts",
+       subtitle = "Demonstrating Continuous Data Distribution",
+       x = "Hourly Crime Count", y = "Density") +
+  theme_minimal()
+
+```
+
+
+[**Test**]{.underline} <br>
+A Kruskal–Wallis test was conducted to assess whether the hourly distribution of crimes differed significantly across boroughs. This non-parametric test was chosen because the crime count data were not normally distributed, as shown in the Q–Q plot.
+
+```{r message=FALSE, warning=FALSE}
+library(ggplot2)
+
+
+
+
+nypd_clean <- nypd %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(NULL)") %>%
+  filter(!is.na(CMPLNT_FR_TM), CMPLNT_FR_TM != "") %>%
+  mutate(Hour = hour(hms(CMPLNT_FR_TM)))
+
+
+hourly_counts <- nypd_clean %>%
+  group_by(BORO_NM, Hour) %>%
+  summarise(crime_count = n(), .groups = "drop")
+
+# Q-Q plot to check normality of crime_count
+ggplot(hourly_counts, aes(sample = crime_count)) +
+  stat_qq(color = "#440154") +
+  stat_qq_line(color = "#FDE725", linetype = "dashed", size = 1) +
+  labs(
+    title = "Q–Q Plot of Hourly Crime Counts",
+    subtitle = "Checking Normality of Crime Distribution Across Boroughs",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 12)
+  )
+
+```
+
+[**Test statistics and p-value**]{.underline}
+```{r message=FALSE, warning=FALSE}
+
+library(dplyr)
+library(lubridate)
+
+
+
+
+nypd_clean <- nypd %>%
+  filter(!is.na(BORO_NM), BORO_NM != "", BORO_NM != "(NULL)") %>%
+  filter(!is.na(CMPLNT_FR_TM), CMPLNT_FR_TM != "") %>%
+  mutate(Hour = hour(hms(CMPLNT_FR_TM)))
+
+
+hourly_counts <- nypd_clean %>%
+  group_by(BORO_NM, Hour) %>%
+  summarise(crime_count = n(), .groups = "drop")
+
+library(dplyr)
+library(gt)
+library(broom)
+
+library(dplyr)
+library(gt)
+library(broom)
+
+
+library(dplyr)
+library(gt)
+
+# Perform Kruskal–Wallis Test
+kruskal_test <- kruskal.test(crime_count ~ BORO_NM, data = hourly_counts)
+
+# Extract test results
+kw_table <- data.frame(
+  Test = "Kruskal–Wallis",
+  Statistic = round(kruskal_test$statistic, 3),
+  Df = kruskal_test$parameter,
+  P_value = signif(kruskal_test$p.value, 3)
+)
+
+# Create a results table with gt
+kw_table %>%
+  gt() %>%
+  tab_header(
+    title = md("**Kruskal–Wallis Test Results**"),
+    subtitle = "Comparing Hourly Crime Distributions Across NYC Boroughs"
+  ) %>%
+  cols_label(
+    Test = "Test Type",
+    Statistic = "Test Statistic (H)",
+    Df = "Degrees of Freedom",
+    P_value = "P-value"
+  ) %>%
+  fmt_scientific(columns = P_value, decimals = 3) %>%
+  tab_style(
+    style = list(cell_text(weight = "bold")),
+    locations = cells_body(columns = vars(Test))
+  ) %>%
+  data_color(
+    columns = vars(P_value),
+    colors = scales::col_numeric(
+      palette = c("#7b3294", "#c2a5cf", "#f7f7f7", "#a6dba0", "#008837"),
+      domain = c(0, 1)
+    )
+  )
+
+```
+[**Conclusion**]{.underline}<br>
+Because the p-value is less than 0.05, we reject the null hypothesis (H₀).
+This indicates that the hourly distribution of crimes significantly differs across boroughs.
+In other words, certain boroughs like Manhattan and Brooklyn have noticeably higher crime frequencies during specific hours compared to others such as Staten Island, emphasizing the need for increased patrol presence and targeted resource allocation in these high-activity regions.
+
+
+## 4.2 Limitations
+
+- The analysis relies on publicly available NYPD complaint data, which may contain reporting errors, omissions, or misclassified offenses.
+- Not all crimes are reported to the police; thus, the dataset may not fully represent actual crime occurrences.
+- The analysis focuses on a specific time period; results may vary across different years or seasons.
+
+
+# 5. Ethics Statement ⚖️
+
+In accordance with the ISI’s Shared Value of Professionalism, this research used anonymised NYPD data responsibly and transparently. Guided by the Ethical Principle of Pursuing Objectivity, the analysis applied unbiased statistical methods to ensure accuracy, fairness, and data integrity while maintaining confidentiality and upholding ethical research standards.
+
+# 6. Acknowledgements 🙏
+
+## 6.1 Technical Resources and Learning Materials
+- R Markdown basics and formatting guide : <https://bookdown.org/yihui/rmarkdown/>
+- ggplot2 reference and visualization guide : <https://ggplot2.tidyverse.org/reference/>
+- dplyr data manipulation tutorial : <https://dplyr.tidyverse.org/articles/dplyr.html>
+- R Color Brewer palettes : <https://r-graph-gallery.com/38-rcolorbrewers-palettes.html>
+- Stacked bar and grouped plot examples: <https://r-graph-gallery.com/stacked-barplot.html>
+- R statistical tests and interpretation guide : <https://r-coder.com/statistical-tests-r/>
+
+## 6.2 Articles
+- Lau (2021) in Discovering Spatio-Temporal Pattern of City Crime – Visual Analysis on Felony Crime in NYC : <https://www.preprints.org/manuscript/202101.0292/v1>
+- Hachicho and Butt (2023) in Unmasking Shadows: Unraveling Crime Patterns in NYC’s Boroughs : <https://academicworks.cuny.edu/ny_pubs/1079/>
+
+## 6.3 Drop-In Session
+
+- Wednesday, October 29 2025, Han
+
+## 6.4 AI usage 
+
+- Publisher: OpenAI<br>
+  Version: GPT-5 (2025)<br>
+  URL: <https://chatgpt.com/share/6901c288-b77c-800c-95ac-2c9c6579cc34><br>
+  Context of use:<br>
+  ChatGPT was used to assist with data analysis guidance,. Specifically, it helped refine statistical methods (Kruskal-Wallis).
+
+
+
+
+
+
+
